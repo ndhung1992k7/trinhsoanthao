@@ -227,7 +227,34 @@
         header input[type="text"] { flex-basis: 100px; }
         #filename { min-width: 120px; flex-basis: 120px; }
     }
-  </style>
+  
+    #manualEditor {
+        white-space: pre;
+        padding-left: 40px;
+        background-color: #fff;
+        color: #000;
+        border-left: 2px solid #ccc;
+    }
+    body.app-theme-dark #manualEditor {
+        background-color: #2c3e50;
+        color: #ecf0f1;
+        border-left: 2px solid #555;
+    }
+
+
+    #manualEditorWrapper {
+        display: flex;
+    }
+    body.app-theme-light #lineNumbers {
+        background-color: #e9ecef;
+        color: #6c757d;
+    }
+    body.app-theme-light #manualEditor {
+        background-color: #ffffff;
+        color: #212529;
+    }
+
+</style>
 </head>
 <body class="app-theme-dark"> <header>
     <div>
@@ -237,6 +264,7 @@
       <button onclick="saveCode()">Lưu</button>
       <button onclick="copyAllCode()">📋 Sao chép</button>
       <button id="previewBtn">🔍 Xem preview</button>
+      <button id="toggleEditorMode">📝 Chế độ đơn giản</button>
     </div>
 
     <div>
@@ -259,6 +287,13 @@
   </header>
 
   <div id="editorContainer">
+
+<div id="manualEditorWrapper" style="display: none; flex: 1; display: flex; overflow: hidden;">
+  <div id="lineNumbers" style="background: #2c3e50; color: #aaa; padding: 10px 5px 10px 10px; font-family: monospace; font-size: 15px; text-align: right; user-select: none; white-space: pre; overflow: hidden;"></div>
+  <textarea id="manualEditor" style="flex:1; padding:10px; font-family: monospace; font-size:15px; border:none; outline:none; resize: none; background:#2c3e50; color:#ecf0f1;"></textarea>
+</div>
+
+    <textarea id="manualEditor" style="display: none; width: 100%; height: 100%; font-family: monospace; font-size: 15px; padding: 10px; border: none; outline: none;"></textarea>
     <textarea id="editor"></textarea>
   </div>
 
@@ -291,10 +326,16 @@
     function applyAppTheme(cmThemeName) {
         document.body.classList.remove('app-theme-dark', 'app-theme-light');
         // Heuristic for app theme based on CodeMirror theme
+        const manualEditor = document.getElementById('manualEditor');
+        if (manualEditor) {
+            manualEditor.classList.remove('app-theme-dark', 'app-theme-light');
+        }
         if (['default', 'material', 'monokai'].includes(cmThemeName)) {
             document.body.classList.add('app-theme-dark');
+            if (manualEditor) manualEditor.classList.add('app-theme-dark');
         } else {
             document.body.classList.add('app-theme-light');
+            if (manualEditor) manualEditor.classList.add('app-theme-light');
         }
     }
 
@@ -544,6 +585,108 @@
       // Clear iframe srcdoc to free up memory and stop any scripts in preview
       document.getElementById('modalPreview').srcdoc = "";
     });
+
+    
+    const manualEditor = document.getElementById("manualEditor");
+    const toggleEditorBtn = document.getElementById("toggleEditorMode");
+    let isManualMode = false;
+
+    toggleEditorBtn.addEventListener("click", () => {
+      isManualMode = !isManualMode;
+      if (isManualMode) {
+        manualEditor.value = editor.getValue();
+        document.querySelector(".CodeMirror").style.display = "none";
+        manualEditor.style.display = "block";
+        toggleEditorBtn.textContent = "💻 Chế độ nâng cao";
+      } else {
+        editor.setValue(manualEditor.value);
+        manualEditor.style.display = "none";
+        document.querySelector(".CodeMirror").style.display = "block";
+        toggleEditorBtn.textContent = "📝 Chế độ đơn giản";
+      }
+    });
+
+    // Override preview button to work in both modes
+    document.getElementById('previewBtn').addEventListener('click', () => {
+      const modal = document.getElementById('previewModal');
+      const iframe = document.getElementById('modalPreview');
+      iframe.srcdoc = isManualMode ? manualEditor.value : editor.getValue();
+      modal.style.display = 'flex';
+    });
+
+    // Override copyAllCode to work in both modes
+    function copyAllCode() {
+      const code = isManualMode ? manualEditor.value : editor.getValue();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code)
+          .then(() => {
+            alert("✅ Đã sao chép toàn bộ mã nguồn!");
+          })
+          .catch(err => {
+            console.error("❌ Lỗi khi sao chép: ", err);
+            try {
+              const textArea = document.createElement("textarea");
+              textArea.value = code;
+              textArea.style.position = "fixed";
+              document.body.appendChild(textArea);
+              textArea.focus();
+              textArea.select();
+              document.execCommand('copy');
+              document.body.removeChild(textArea);
+              alert("✅ Đã sao chép (sử dụng fallback)!");
+            } catch (e) {
+              alert("❌ Không thể sao chép. Vui lòng thử lại hoặc sao chép thủ công.");
+            }
+          });
+      } else {
+        try {
+          const textArea = document.createElement("textarea");
+          textArea.value = code;
+          textArea.style.position = "fixed";
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          alert("✅ Đã sao chép (sử dụng fallback execCommand)!");
+        } catch (e) {
+          console.error("❌ Lỗi khi sao chép (execCommand): ", e);
+          alert("❌ Không thể sao chép. Vui lòng thử lại hoặc sao chép thủ công.");
+        }
+      }
+    }
+
+
+    
+    const manualEditorWrapper = document.getElementById("manualEditorWrapper");
+    const lineNumbers = document.getElementById("lineNumbers");
+
+    function updateLineNumbers() {
+      const lines = manualEditor.value.split("\n").length;
+      lineNumbers.innerHTML = Array.from({ length: lines }, (_, i) => i + 1).join("<br>");
+    }
+
+    manualEditor.addEventListener("input", updateLineNumbers);
+    manualEditor.addEventListener("scroll", () => {
+      lineNumbers.scrollTop = manualEditor.scrollTop;
+    });
+
+    toggleEditorBtn.addEventListener("click", () => {
+      isManualMode = !isManualMode;
+      if (isManualMode) {
+        manualEditor.value = editor.getValue();
+        document.querySelector(".CodeMirror").style.display = "none";
+        manualEditorWrapper.style.display = "flex";
+        updateLineNumbers();
+        toggleEditorBtn.textContent = "💻 Chế độ nâng cao";
+      } else {
+        editor.setValue(manualEditor.value);
+        manualEditorWrapper.style.display = "none";
+        document.querySelector(".CodeMirror").style.display = "block";
+        toggleEditorBtn.textContent = "📝 Chế độ đơn giản";
+      }
+    });
+
 
     // Initial load
     loadSavedTheme(); // Apply theme first
